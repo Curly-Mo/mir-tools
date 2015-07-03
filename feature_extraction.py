@@ -1,73 +1,98 @@
 #!/usr/bin/env python
 
-"""Main Script"""
+"""Tools for extracting features"""
 
 import logging
 logging.basicConfig(format='%(levelname)s: %(message)s', level=logging.INFO)
 import argparse
-import random
 
 import librosa
 from sklearn.externals import joblib
+import numpy as np
 
 import instrument_parser
-import machine_learning
+import util
 
 
-def get_mfccs(tracks, dc=False):
+def get_mfccs(track, dc=False, n_fft=2048, average=None, normalize=False):
+    audio, sr = librosa.load(track['file_path'])
+    mfcc = librosa.feature.mfcc(audio, sr=sr, n_mfcc=20, fmin=20, n_fft=n_fft)
+    if not dc:
+        mfcc = mfcc[1:]
+    if normalize:
+        # Normalize each feature vector between 0 and 1
+        mfcc = mfcc - mfcc.min(axis=0)
+        mfcc = mfcc / mfcc.max(axis=0)
+    if average and average > 0:
+        samples = sr * average / n_fft
+        chunks = util.grouper(mfcc.T, samples)
+        averaged_chunk = [np.mean(group, axis=0) for group in chunks]
+        mfcc = np.array(averaged_chunk).T
+    return mfcc
+
+
+def set_track_mfccs(tracks, dc=False, n_fft=2048, average=None, normalize=False,
+                    delta=False, delta_delta=False):
     logging.info('Computing MFCCs...')
     for track in tracks:
-        audio, sr = librosa.load(track.file_path)
-        mfcc = librosa.feature.mfcc(audio, sr=sr, n_mfcc=20, fmin=20)
-        if not dc:
-            mfcc = mfcc[1:]
-        yield mfcc
+        mfcc = get_mfccs(
+            track,
+            dc=dc,
+            n_fft=n_fft,
+            average=average,
+            normalize=normalize
+        )
+        track['mfcc'] = mfcc
+        if delta:
+            mfcc_delta = librosa.feature.delta(mfcc)
+            track['mfcc_delta'] = mfcc_delta
+        if delta_delta:
+            mfcc_delta_delta = librosa.feature.delta(mfcc)
+            track['mfcc_delta_delta'] = mfcc_delta_delta
+    return tracks
 
 
 def main(args):
     with instrument_parser.InstrumentParser() as instruments:
         if args.load_features:
             logging.info('Loading features into memory...')
-            features, labels = joblib.load(args.load_features)
+            tracks = joblib.load(args.load_features)
         else:
             tracks = instruments.get_stems(
                 args.min_sources,
                 args.instruments,
                 args.rm_silence,
-                args.trim
+                args.trim,
+                args.instrument_count,
             )
             tracks = list(tracks)
-            if args.test_subset:
-                tracks = random.sample(tracks, args.test_subset)
 
-            features = list(get_mfccs(tracks))
-            labels = machine_learning.get_labels(tracks, features)
+            set_track_mfccs(tracks)
 
         if args.save_features:
             logging.info('Saving features to disk...')
-            joblib.dump((features, labels), args.save_features, compress=True)
+            joblib.dump(tracks, args.save_features, compress=True)
 
-        print(features)
-        print(labels)
+        logging.info(tracks)
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(
-        description="Extract instrument stems from medleydb")
+        description="Extract features from medleydb")
     parser.add_argument('-s', '--save_features', type=str, default=None,
                         help='Location to save pickled features to')
     parser.add_argument('-l', '--load_features', type=str, default=None,
                         help='Location to load pickled features from')
-    parser.add_argument('-u', '--test_subset', type=int, default=None,
-                        help='Run a test on small subset of data')
     parser.add_argument('-m', '--min_sources', nargs='*', default=10,
                         help='Min sources required for instrument selection')
     parser.add_argument('-i', '--instruments', nargs='*', default=None,
                         help='List of instruments to extract')
+    parser.add_argument('-c', '--instrument_count', type=int, default=None,
+                        help='Max number of tracks for each instrument')
     parser.add_argument('-r', '--rm_silence', action='store_true',
                         help='Remove silence from audio files')
     parser.add_argument('-t', '--trim', type=int, default=None,
-                        help='Trim all audio files down to this length (in seconds)')
+                        help='Trim audio files to this length (in seconds)')
     args = parser.parse_args()
 
     main(args)

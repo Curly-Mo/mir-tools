@@ -81,9 +81,21 @@ def shape_labels(labels):
     return Y
 
 
-def shape_features(features):
+def shape_features(tracks, feature_names):
+    logging.debug('Shaping features/labels to sklearn format')
+    features = []
+    labels = []
+    for track in tracks:
+        feature = [track[f] for f in feature_names]
+        feature = np.vstack(feature)
+        features.append(feature)
+        labels.append([track['label']] * feature.shape[1])
+
     X = np.concatenate([feature.T for feature in features])
-    return X
+    Y = np.array(flatten(labels))
+    logging.debug('X: {}'.format(X.shape))
+    logging.debug('Y: {}'.format(Y.shape))
+    return X, Y
 
 
 def train_features(features, labels):
@@ -113,13 +125,13 @@ def predict(X, clf):
     return predicted
 
 
-def prediction_per_track(tracks, mfccs, predicted):
+def prediction_per_track(tracks, features, predicted):
     i = 0
-    for track, mfcc in izip(tracks, mfccs):
-        track_predictions = predicted[i:i+mfcc.shape[1]]
+    for track, feature in izip(tracks, features):
+        track_predictions = predicted[i:i+feature.shape[1]]
         most_common = Counter(track_predictions).most_common(1)[0][0]
         track.prediction = most_common
-        i += mfcc.shape[1]
+        i += feature.shape[1]
     return tracks
 
 
@@ -184,6 +196,8 @@ def main(args):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(
         description="Extract instrument stems from medleydb")
+    parser.add_argument('action', type=str, choices={'train', 'predict'},
+                        help='Action to take (Train or Predict)')
     parser.add_argument('-s', '--save_model', type=str, default=None,
                         help='Location to save pickled trained model')
     parser.add_argument('-l', '--load_model', type=str, default=None,
@@ -192,16 +206,26 @@ if __name__ == '__main__':
                         help='Location to save pickled features to')
     parser.add_argument('--load_features', type=str, default=None,
                         help='Location to load pickled features from')
-    parser.add_argument('-u', '--test_subset', type=int, default=None,
-                        help='Run a test on small subset of data')
     parser.add_argument('-m', '--min_sources', nargs='*', default=10,
                         help='Min sources required for instrument selection')
     parser.add_argument('-i', '--instruments', nargs='*', default=None,
                         help='List of instruments to extract')
+    parser.add_argument('-c', '--instrument_count', type=int, default=None,
+                        help='Max number of tracks for each instrument')
     parser.add_argument('-r', '--rm_silence', action='store_true',
                         help='Remove silence from audio files')
     parser.add_argument('-t', '--trim', type=int, default=None,
-                        help='Trim all audio files down to this length (in seconds)')
+                        help='Trim audio files to this length (in seconds)')
+    parser.add_argument('-n', '--n_fft', type=int, default=2048,
+                        help='FFT size of MFCCs')
+    parser.add_argument('-a', '--average', type=int, default=None,
+                        help='Number of seconds to average features over')
+    parser.add_argument('--normalize', action='store_true',
+                        help='Normalize MFCC feature vectors between 0 and 1')
+    parser.add_argument('-d', '--delta', action='store_true',
+                        help='Compute MFCC deltas')
+    parser.add_argument('--delta_delta', action='store_true',
+                        help='Compute MFCC delta-deltas')
     args = parser.parse_args()
 
     main(args)

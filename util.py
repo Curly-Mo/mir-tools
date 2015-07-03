@@ -1,12 +1,16 @@
-import random
-from itertools import izip_longest
+from itertools import izip
+from collections import Counter
 
 
-def grouper(n, iterable, padvalue=None):
-    "grouper(3, 'abcdefg', 'x') --> ('a','b','c'), ('d','e','f'), ('g','x','x')"
-    return izip_longest(*[iter(iterable)]*n, fillvalue=padvalue)
+def grouper(iterable, n, padvalue=None):
+    """
+    Group interable into chunks of size n
+    Removes last group if shorter than n
+    grouper('abcdefg', 3) --> (('a','b','c'), ('d','e','f'))
+    """
+    return izip(*[iter(iterable)]*n)
 
 
-def random_subset(items, num):
-    subset = random.sample(items, num)
-    return subset
+def most_common(values):
+    most_common = Counter(values).most_common(1)[0][0]
+    return most_common
