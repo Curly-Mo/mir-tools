@@ -10,7 +10,7 @@ import librosa
 from sklearn.externals import joblib
 import numpy as np
 
-import instrument_parser
+import track_parser
 import util
 
 
@@ -32,7 +32,7 @@ def get_mfccs(track, dc=False, n_fft=2048, average=None, normalize=False):
 
 
 def set_track_mfccs(tracks, dc=False, n_fft=2048, average=None, normalize=False,
-                    delta=False, delta_delta=False):
+                    delta=False, delta_delta=False, save=False):
     logging.info('Computing MFCCs...')
     for track in tracks:
         mfcc = get_mfccs(
@@ -49,31 +49,47 @@ def set_track_mfccs(tracks, dc=False, n_fft=2048, average=None, normalize=False,
         if delta_delta:
             mfcc_delta_delta = librosa.feature.delta(mfcc)
             track['mfcc_delta_delta'] = mfcc_delta_delta
+    if save:
+        logging.info('Saving tracks MFCCs to disk...')
+        joblib.dump(tracks, save, compress=True)
+    return tracks
+
+
+def load_tracks(label, args):
+    with track_parser.get_instance(label) as parser:
+        tracks = parser.get_tracks(
+            min_sources=args.min_sources,
+            instruments=args.instruments,
+            rm_silence=args.rm_silence,
+            trim=args.trim,
+            count=args.count,
+        )
+        tracks = list(tracks)
+
+        set_track_mfccs(
+            tracks,
+            n_fft=args.n_fft,
+            average=args.average,
+            normalize=args.normalize,
+            delta=args.delta,
+            delta_delta=args.delta_delta,
+            save=args.save_features,
+        )
     return tracks
 
 
 def main(args):
-    with instrument_parser.InstrumentParser() as instruments:
-        if args.load_features:
-            logging.info('Loading features into memory...')
-            tracks = joblib.load(args.load_features)
-        else:
-            tracks = instruments.get_stems(
-                args.min_sources,
-                args.instruments,
-                args.rm_silence,
-                args.trim,
-                args.instrument_count,
-            )
-            tracks = list(tracks)
+    if args.load_features:
+        logging.info('Loading features into memory...')
+        tracks = joblib.load(args.load_features)
+    else:
+        tracks = load_tracks(args)
 
-            set_track_mfccs(tracks)
+    if args.save_features:
+        logging.info('Saving features to disk...')
+        joblib.dump(tracks, args.save_features, compress=True)
 
-        if args.save_features:
-            logging.info('Saving features to disk...')
-            joblib.dump(tracks, args.save_features, compress=True)
-
-        logging.info(tracks)
+    logging.info(tracks)
 
 
 if __name__ == '__main__':

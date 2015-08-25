@@ -13,7 +13,14 @@ import argparse
 import medleydb as mdb
 
 
-class InstrumentParser:
+def get_instance(name):
+    for cls in TrackParser.__subclasses__():
+        if cls.__name__.lower().startswith(name.lower()):
+            return cls()
+    return TrackParser()
+
+
+class TrackParser(object):
     track_attributes = [
         'file_path',
         'label',
@@ -26,6 +33,17 @@ class InstrumentParser:
     def __exit__(self, type, value, traceback):
         if self.tempdir:
             shutil.rmtree(self.tempdir)
+
+    def track_to_dict(self, track):
+        d = {}
+        for attribute in self.track_attributes:
+            d[attribute] = getattr(track, attribute)
+        return d
+
+
+class InstrumentParser(TrackParser):
+    def __init__(self):
+        super(InstrumentParser, self).__init__()
 
     def get_valid_instruments(self, min_sources):
         """Get set of instruments with at least min_sources different sources"""
@@ -43,13 +61,7 @@ class InstrumentParser:
         logging.info(instrument_counts)
         return {i for i in instrument_counts if instrument_counts[i] >= min_sources}
 
-    def track_to_dict(self, track, attributes):
-        d = {}
-        for attribute in attributes:
-            d[attribute] = getattr(track, attribute)
-        return d
-
-    def get_stems(self, min_sources=10, instruments=None, rm_silence=False, trim=None, count=None):
+    def get_tracks(self, min_sources=10, instruments=None, rm_silence=False, trim=None, count=None, **kwargs):
         if instruments:
             valid_instruments = instruments
         else:
@@ -79,8 +91,47 @@ class InstrumentParser:
                             subprocess.Popen(sox_args, stderr=subprocess.PIPE)
                             stem.file_path = dest
                         stem.label = stem.instrument
-                        yield self.track_to_dict(stem, self.track_attributes)
+                        yield self.track_to_dict(stem)
 
+        logging.info(counts)
+
+
+class GenreParser(TrackParser):
+    def __init__(self):
+        super(GenreParser, self).__init__()
+
+    def get_valid_genres(self, min_sources):
+        """Get set of genres with at least min_sources different sources"""
+        logging.info('Determining valid genres...\n')
+        multitrack_list = mdb.load_all_multitracks()
+
+        genre_counts = defaultdict(lambda: 0)
+        for track in multitrack_list:
+            if track.genre:
+                genre_counts[track.genre] += 1
+        logging.info(genre_counts)
+        return {g for g in genre_counts if genre_counts[g] >= min_sources}
+
+    def get_tracks(self, min_sources=10, genres=None, count=None, **kwargs):
+        if genres:
+            valid_genres = genres
+        else:
+            valid_genres = self.get_valid_genres(min_sources)
+        logging.info('Valid genres: ' + str(valid_genres) + '\n')
+
+        counts = defaultdict(lambda: 0)
+
+        multitrack_list = mdb.load_all_multitracks()
+
+        for track in multitrack_list:
+            if track.genre and track.genre in valid_genres:
+                if count and counts[track.genre] >= count:
+                    continue
+                counts[track.genre] += 1
+
+                track.file_path = track.mix_path
+                track.label = track.genre
+                yield self.track_to_dict(track)
         logging.info(counts)
 
 

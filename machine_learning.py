@@ -13,7 +13,6 @@ import numpy as np
 import sklearn
 import matplotlib as plt
 from sklearn.externals import joblib
-from sklearn.cross_validation import StratifiedKFold
 from sklearn.metrics import confusion_matrix
 
 import feature_extraction
@@ -108,7 +107,7 @@ def train_features(features, labels):
 def train(X, Y):
     #X = sklearn.preprocessing.normalize(X, norm='l1', axis=1, copy=True)
     logging.info('Training...')
-    clf = sklearn.svm.LinearSVC(class_weight='auto')
+    clf = classifier()
     clf.fit(X, Y)
     return clf
 
@@ -120,7 +119,7 @@ def predict_features(features, clf):
 
 def predict(X, clf):
     #X = sklearn.preprocessing.normalize(X, norm='l1', axis=1, copy=True)
-    logging.info('Predicting...')
+    logging.debug('Predicting...')
     predicted = clf.predict(X)
     return predicted
 
@@ -135,27 +134,17 @@ def prediction_per_track(tracks, features, predicted):
     return tracks
 
 
-def cross_validate(tracks, features, labels, folds=5, shuffle=True):
-    X = shape_features(features)
-    Y = shape_labels(labels)
-    kf = StratifiedKFold(Y, n_folds=folds, shuffle=shuffle)
-    for train, test in kf:
-        logging.info(train)
-        logging.info(test)
-        X_train, X_test = X[train], X[test]
-        Y_train, Y_test = Y[train], Y[test]
-        clf = train(X_train, Y_train)
-        predicted = predict(X_test, clf)
-        cm = confusion(Y_test, predicted)
-        print(cm)
-
-
 def get_labels(tracks, features):
     labels = []
     for track, feature in izip(tracks, features):
         # Repeat instrument name for each mfcc sample
         labels.append([track.label] * feature.shape[1])
     return labels
+
+
+def classifier():
+    clf = sklearn.svm.LinearSVC(class_weight='auto')
+    return clf
 
 
 def main(args):
