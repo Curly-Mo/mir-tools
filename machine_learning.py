@@ -16,7 +16,7 @@ from sklearn.externals import joblib
 from sklearn.metrics import confusion_matrix
 
 import feature_extraction
-import instrument_parser
+import track_parser
 
 
 def confusion_str(cm, labels, hide_zeroes=False, hide_diagonal=False, hide_threshold=None):
@@ -148,7 +148,7 @@ def classifier():
 
 
 def main(args):
-    with instrument_parser.InstrumentParser() as instruments:
+    with track_parser.InstrumentParser() as instruments:
         if args.load_model:
             logging.info('Loading model into memory...')
             clf = joblib.load(args.load_model)

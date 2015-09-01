@@ -67,7 +67,7 @@ def best_svm(tracks, feature_names, n_iter=200, save=False):
     print('Best Params: {}'.format(random_search.best_params_))
     if save:
         logging.info('Saving classifier to disk...')
-        joblib.dump(clf, save, compress=True)
+        joblib.dump(random_search.best_estimator_, save, compress=True)
     return random_search.best_estimator_
 
 
