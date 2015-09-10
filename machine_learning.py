@@ -136,8 +136,8 @@ def predict_file(path, remove_silence=True):
         args.save_features = False
         feature_extraction.set_features([track, ], args)
 
-        prediction = predict_track(clf, track, feature_names)
-    return prediction
+        prediction, predictions = predict_track(clf, track, feature_names)
+    return prediction, predictions
 
 
 def predict_track(clf, track, feature_names):
@@ -227,15 +227,15 @@ def predict_main(args):
     if args.predict_files:
         predict_tracks = []
         for filepath in args.predict_files:
-            prediction = predict_file(filepath, clf)
-            print prediction
+            prediction, predictions = predict_file(filepath, clf)
+            print predictions
     else:
         predict_tracks = feature_extraction.load_tracks(args.label, args)
         feature_extraction.set_features(predict_tracks, args)
 
         for track in predict_tracks:
-            prediction = predict_track(clf, track, feature_names)
-            print prediction
+            prediction, predictions = predict_track(clf, track, feature_names)
+            print predictions
 
     if args.save_classifier:
         save_classifier(args.save_classifier, clf, feature_names)
