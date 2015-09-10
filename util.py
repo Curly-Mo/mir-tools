@@ -1,5 +1,7 @@
 from itertools import izip
 from collections import Counter
+import subprocess
+import logging
 
 
 def grouper(iterable, n, padvalue=None):
@@ -14,6 +16,15 @@ def grouper(iterable, n, padvalue=None):
 def most_common(values):
     most_common = Counter(values).most_common(1)[0][0]
     return most_common
+
+
+def remove_silence(input_path, output_path, block=True):
+    logging.info('Removing silence from: ' + str(input_path) + ' to: ' + str(output_path) + '\n')
+    sox_args = ['sox', input_path, '-c', '1', output_path, 'silence', '1', '0.1', '0.1%', '-1', '0.1', '0.1%']
+    process_handle = subprocess.Popen(sox_args, stderr=subprocess.PIPE)
+    if block:
+        process_handle.communicate()
+    return output_path
 
 
 # This is no longer needed

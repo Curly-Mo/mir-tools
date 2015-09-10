@@ -90,8 +90,7 @@ def kfold(tracks, feature_names, folds=5, shuffle=True):
     for train, test in kf:
         train_tracks = [tracks[i] for i in train]
         test_tracks = [tracks[i] for i in test]
-        X_train, Y_train = machine_learning.shape_features(train_tracks, feature_names)
-        clf = machine_learning.train(X_train, Y_train)
+        clf = machine_learning.train_tracks(train_tracks, feature_names)
         predicted_all = []
         Y_test_all = []
         for track in test_tracks:
@@ -104,24 +103,11 @@ def kfold(tracks, feature_names, folds=5, shuffle=True):
         yield test_tracks
 
 
-def get_feature_names(args):
-    feature_names = ['mfcc']
-    if args.delta:
-        feature_names.append('mfcc_delta')
-    if args.delta_delta:
-        feature_names.append('mfcc_delta_delta')
-    return feature_names
-
-
 def main(args):
     start = time()
-    if args.load_features:
-        logging.info('Loading features into memory...')
-        tracks = joblib.load(args.load_features)
-    else:
-        tracks = feature_extraction.load_tracks(args.label, args)
+    tracks = feature_extraction.load_tracks(args.label, args)
 
-    feature_names = get_feature_names(args)
+    feature_names = feature_extraction.get_feature_names(args)
 
     if args.action == 'kfold':
         folds = kfold(tracks, feature_names, args.folds)

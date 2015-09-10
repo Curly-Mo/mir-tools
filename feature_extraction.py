@@ -55,26 +55,51 @@ def set_track_mfccs(tracks, dc=False, n_fft=2048, average=None, normalize=False,
     return tracks
 
 
-def load_tracks(label, args):
-    with track_parser.get_instance(label) as parser:
-        tracks = parser.get_tracks(
-            min_sources=args.min_sources,
-            instruments=args.instruments,
-            rm_silence=args.rm_silence,
-            trim=args.trim,
-            count=args.count,
-        )
-        tracks = list(tracks)
+def get_feature_names(args):
+    feature_names = ['mfcc']
+    if args.delta:
+        feature_names.append('mfcc_delta')
+    if args.delta_delta:
+        feature_names.append('mfcc_delta_delta')
+    return feature_names
 
-        set_track_mfccs(
-            tracks,
-            n_fft=args.n_fft,
-            average=args.average,
-            normalize=args.normalize,
-            delta=args.delta,
-            delta_delta=args.delta_delta,
-            save=args.save_features,
-        )
+
+def set_features(tracks, args):
+    set_track_mfccs(
+        tracks,
+        n_fft=args.n_fft,
+        average=args.average,
+        normalize=args.normalize,
+        delta=args.delta,
+        delta_delta=args.delta_delta,
+        save=args.save_features,
+    )
+
+
+def load_tracks(label, args):
+    if args.load_features:
+        logging.info('Loading features into memory...')
+        tracks = joblib.load(args.load_features)
+    else:
+        with track_parser.get_instance(label) as parser:
+            tracks = parser.get_tracks(
+                min_sources=args.min_sources,
+                instruments=args.instruments,
+                rm_silence=args.rm_silence,
+                trim=args.trim,
+                count=args.count,
+            )
+            tracks = list(tracks)
+
+            set_track_mfccs(
+                tracks,
+                n_fft=args.n_fft,
+                average=args.average,
+                normalize=args.normalize,
+                delta=args.delta,
+                delta_delta=args.delta_delta,
+                save=args.save_features,
+            )
     return tracks
 
 

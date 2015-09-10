@@ -4,10 +4,12 @@
 
 import logging
 logging.basicConfig(format='%(levelname)s: %(message)s', level=logging.INFO)
+import os
 import argparse
 from itertools import izip
 from collections import Counter
-import random
+from time import time
+import tempfile
 
 import numpy as np
 import sklearn
@@ -16,8 +18,14 @@ from sklearn.externals import joblib
 from sklearn.metrics import confusion_matrix
 
 import feature_extraction
-import track_parser
+import util
 
+
+
+def default_classifier():
+    dot = os.path.dirname(os.path.realpath(__file__))
+    DEFAULT = os.path.join(dot, 'data/mfcc_linear_svm.p')
+    return load_classifier(DEFAULT)
 
 def confusion_str(cm, labels, hide_zeroes=False, hide_diagonal=False, hide_threshold=None):
     """pretty print for confusion matrices"""
@@ -97,9 +105,8 @@ def shape_features(tracks, feature_names):
     return X, Y
 
 
-def train_features(features, labels):
-    X = shape_features(features)
-    Y = flatten(labels)
+def train_tracks(tracks, feature_names):
+    X, Y = shape_features(tracks, feature_names)
     clf = train(X, Y)
     return clf
 
@@ -110,6 +117,40 @@ def train(X, Y):
     clf = classifier()
     clf.fit(X, Y)
     return clf
+
+
+def predict_file(path, remove_silence=True):
+    with tempfile.NamedTemporaryFile(suffix=os.path.splitext(path)[1]) as f:
+        path = util.remove_silence(path, f.name, block=True)
+        clf, feature_names = default_classifier()
+        track = {
+            'file_path': path,
+            'label': 'unknown',
+        }
+        args = type('', (), {})
+        args.n_fft = 4096
+        args.average = 1
+        args.normalize = True
+        args.delta = True
+        args.delta_delta = True
+        args.save_features = False
+        feature_extraction.set_features([track, ], args)
+
+        prediction = predict_track(clf, track, feature_names)
+    return prediction
+
+
+def predict_track(clf, track, feature_names):
+    predicted = predict_tracks(clf, [track, ], feature_names)
+    track['sample_predictions'] = predicted
+    prediction = util.most_common(predicted)
+    track['prediction'] = prediction
+    return prediction
+
+
+def predict_tracks(clf, tracks, feature_names):
+    X, Y = shape_features(tracks, feature_names)
+    return predict(X, clf)
 
 
 def predict_features(features, clf):
@@ -147,39 +188,67 @@ def classifier():
     return clf
 
 
+def save_classifier(path, clf, feature_names):
+    classifier = {
+        'clf': clf,
+        'feature_names': feature_names,
+    }
+    logging.info('Saving model to disk...')
+    joblib.dump(classifier, path, compress=True)
+
+
+def load_classifier(path):
+    logging.info('Loading model into memory...')
+    classifier = joblib.load(path)
+    return classifier['clf'], classifier['feature_names']
+
+
+def train_main(args):
+    if args.load_classifier:
+        clf, feature_names = load_classifier(args.load_classifier)
+    else:
+        tracks = feature_extraction.load_tracks(args.label, args)
+        feature_names = feature_extraction.get_feature_names(args)
+        clf = train_tracks(tracks, feature_names)
+
+    if args.save_classifier:
+        save_classifier(args.save_classifier, clf, feature_names)
+
+
+def predict_main(args):
+    if args.load_classifier:
+        clf, feature_names = load_classifier(args.load_classifier)
+    else:
+        tracks = feature_extraction.load_tracks(args.label, args)
+        feature_names = feature_extraction.get_feature_names(args)
+        clf = train_tracks(tracks, feature_names)
+
+    if args.predict_files:
+        predict_tracks = []
+        for filepath in args.predict_files:
+            prediction = predict_file(filepath, clf)
+            print prediction
+    else:
+        predict_tracks = feature_extraction.load_tracks(args.label, args)
+        feature_extraction.set_features(predict_tracks, args)
+
+        for track in predict_tracks:
+            prediction = predict_track(clf, track, feature_names)
+            print prediction
+
+    if args.save_classifier:
+        save_classifier(args.save_classifier, clf, feature_names)
+
+
 def main(args):
-    with track_parser.InstrumentParser() as instruments:
-        if args.load_model:
-            logging.info('Loading model into memory...')
-            clf = joblib.load(args.load_model)
-        else:
-            tracks = instruments.get_stems(
-                args.min_sources,
-                args.instruments,
-                args.rm_silence,
-                args.trim
-            )
-            tracks = list(tracks)
-            if args.test_subset:
-                tracks = random.sample(tracks, args.test_subset)
-            mfccs = list(feature_extraction.get_mfccs(tracks))
-            labels = get_labels(tracks, mfccs)
-            clf = train(mfccs, labels)
+    start = time()
+    if args.action == 'train':
+        train_main(args)
+    elif args.action == 'predict':
+        predict_main(args)
 
-        if args.save_model:
-            logging.info('Saving model to disk...')
-            joblib.dump(clf, args.save_model, compress=True)
-
-        test_tracks = random.sample(tracks, 2)
-        test_mfccs = list(feature_extraction.get_mfccs(test_tracks))
-        predicted = predict(test_mfccs, clf)
-        final_tracks = prediction_per_track(
-            test_tracks,
-            test_mfccs,
-            predicted,
-        )
-        for track in final_tracks:
-            logging.info(vars(track))
+    end = time()
+    logging.info('Elapsed time: {}'.format(end - start))
 
 
 if __name__ == '__main__':
@@ -187,9 +256,12 @@ if __name__ == '__main__':
         description="Extract instrument stems from medleydb")
     parser.add_argument('action', type=str, choices={'train', 'predict'},
                         help='Action to take (Train or Predict)')
-    parser.add_argument('-s', '--save_model', type=str, default=None,
+    parser.add_argument('label', type=str,
+                        choices={'instrument', 'genre'},
+                        help='Track label')
+    parser.add_argument('-s', '--save_classifier', type=str, default=None,
                         help='Location to save pickled trained model')
-    parser.add_argument('-l', '--load_model', type=str, default=None,
+    parser.add_argument('-l', '--load_classifier', type=str, default=None,
                         help='Location to load pickled model from')
     parser.add_argument('--save_features', type=str, default=None,
                         help='Location to save pickled features to')
@@ -215,6 +287,8 @@ if __name__ == '__main__':
                         help='Compute MFCC deltas')
     parser.add_argument('--delta_delta', action='store_true',
                         help='Compute MFCC delta-deltas')
+    parser.add_argument('--predict_files', nargs='*', default=None,
+                        help='List of audio file paths to predict')
     args = parser.parse_args()
 
     main(args)
