@@ -143,9 +143,10 @@ def predict_file(path, remove_silence=True):
 def predict_track(clf, track, feature_names):
     predicted = predict_tracks(clf, [track, ], feature_names)
     track['sample_predictions'] = predicted
-    prediction = util.most_common(predicted)
+    prediction, predictions = util.most_common(predicted)
     track['prediction'] = prediction
-    return prediction
+    track['predictions'] = prediction
+    return prediction, predictions
 
 
 def predict_tracks(clf, tracks, feature_names):
@@ -160,7 +161,7 @@ def predict_features(features, clf):
 
 def predict(X, clf):
     #X = sklearn.preprocessing.normalize(X, norm='l1', axis=1, copy=True)
-    logging.debug('Predicting...')
+    logging.info('Predicting...')
     predicted = clf.predict(X)
     return predicted
 

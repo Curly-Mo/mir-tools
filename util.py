@@ -14,8 +14,14 @@ def grouper(iterable, n, padvalue=None):
 
 
 def most_common(values):
-    most_common = Counter(values).most_common(1)[0][0]
-    return most_common
+    total = len(values)
+    most_common_list = Counter(values).most_common()
+    most_common_list = [
+        (pair[0], round(100*pair[1]/float(total)))
+        for pair in most_common_list
+    ]
+    most_common = most_common_list[0][0]
+    return most_common, most_common_list
 
 
 def remove_silence(input_path, output_path, block=True):
