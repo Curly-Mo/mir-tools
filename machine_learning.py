@@ -24,7 +24,7 @@ import util
 
 def default_classifier():
     dot = os.path.dirname(os.path.realpath(__file__))
-    DEFAULT = os.path.join(dot, 'data/mfcc_linear_svm.p')
+    DEFAULT = os.path.join(dot, 'data/default_svm.p')
     return load_classifier(DEFAULT)
 
 def confusion_str(cm, labels, hide_zeroes=False, hide_diagonal=False, hide_threshold=None):

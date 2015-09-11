@@ -97,7 +97,7 @@ def kfold(tracks, feature_names, folds=5, shuffle=True):
             X_test, Y_test = machine_learning.shape_features([track], feature_names)
             predicted = machine_learning.predict(X_test, clf)
             track['sample_predictions'] = predicted
-            track['prediction'] = util.most_common(predicted)
+            track['prediction'], track['predictions'] = util.most_common(predicted)
             predicted_all.extend(predicted)
             Y_test_all.extend(Y_test)
         yield test_tracks
@@ -140,7 +140,7 @@ if __name__ == '__main__':
                         help='Location to save pickled features to')
     parser.add_argument('-l', '--load_features', type=str, default=None,
                         help='Location to load pickled features from')
-    parser.add_argument('-m', '--min_sources', nargs='*', default=10,
+    parser.add_argument('-m', '--min_sources', type=int, default=10,
                         help='Min sources required for instrument selection')
     parser.add_argument('-i', '--instruments', nargs='*', default=None,
                         help='List of instruments to extract')
