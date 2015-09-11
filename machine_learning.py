@@ -137,6 +137,7 @@ def predict_file(path, remove_silence=True):
         feature_extraction.set_features([track, ], args)
 
         prediction, predictions = predict_track(clf, track, feature_names)
+    logging.info(predictions)
     return prediction, predictions
 
 
