@@ -132,7 +132,7 @@ def predict_file(path, remove_silence=True):
         args.average = 1
         args.normalize = True
         args.delta = True
-        args.delta_delta = True
+        args.delta_delta = False
         args.save_features = False
         feature_extraction.set_features([track, ], args)
 
