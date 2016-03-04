@@ -5,6 +5,7 @@
 import logging
 logging.basicConfig(format='%(levelname)s: %(message)s', level=logging.INFO)
 import argparse
+from time import time
 
 import librosa
 from sklearn.externals import joblib
@@ -14,9 +15,12 @@ import track_parser
 import util
 
 
-def get_mfccs(track, dc=False, n_fft=2048, average=None, normalize=False):
+def get_mfccs(track, dc=False, n_fft=2048, average=None, normalize=False,
+              n_mfcc=20, fmin=20, fmax=None, hop_length=512, n_mels=128, **kwargs):
     audio, sr = librosa.load(track['file_path'])
-    mfcc = librosa.feature.mfcc(audio, sr=sr, n_mfcc=20, fmin=20, n_fft=n_fft)
+    mfcc = librosa.feature.mfcc(audio, sr=sr, n_fft=n_fft, n_mfcc=n_mfcc,
+                                fmin=fmin, fmax=fmax, hop_length=hop_length,
+                                n_mels=n_mels)
     if not dc:
         mfcc = mfcc[1:]
     if normalize:
@@ -32,94 +36,79 @@ def get_mfccs(track, dc=False, n_fft=2048, average=None, normalize=False):
 
 
 def set_track_mfccs(tracks, dc=False, n_fft=2048, average=None, normalize=False,
-                    delta=False, delta_delta=False, save=False):
+                    feature_names=None, save_features=False, **kwargs):
     logging.info('Computing MFCCs...')
     for track in tracks:
-        mfcc = get_mfccs(
-            track,
-            dc=dc,
-            n_fft=n_fft,
-            average=average,
-            normalize=normalize
-        )
-        track['mfcc'] = mfcc
-        if delta:
+        if 'mfcc' in feature_names:
+            mfcc = get_mfccs(
+                track,
+                dc=dc,
+                n_fft=n_fft,
+                average=average,
+                normalize=normalize,
+                **kwargs
+            )
+            track['mfcc'] = mfcc
+        if 'mfcc_delta' in feature_names:
             mfcc_delta = librosa.feature.delta(mfcc)
             track['mfcc_delta'] = mfcc_delta
-        if delta_delta:
+        if 'mfcc_delta_delta' in feature_names:
             mfcc_delta_delta = librosa.feature.delta(mfcc)
             track['mfcc_delta_delta'] = mfcc_delta_delta
-    if save:
+    if save_features:
         logging.info('Saving tracks MFCCs to disk...')
-        joblib.dump(tracks, save, compress=True)
+        args = locals()
+        args.pop('tracks', None)
+        args.pop('track', None)
+        args.pop('mfcc', None)
+        args.pop('mfcc_delta', None)
+        args.pop('mfcc_delta_delta', None)
+        print args
+        joblib.dump([tracks, args], save_features, compress=True)
     return tracks
 
 
-def get_feature_names(args):
-    feature_names = ['mfcc']
-    if args.delta:
-        feature_names.append('mfcc_delta')
-    if args.delta_delta:
-        feature_names.append('mfcc_delta_delta')
-    return feature_names
+def set_features(tracks, **kwargs):
+    mfcc_features = ('mfcc', 'mfcc_delta', 'mfcc_delta_delta')
+    if any(x in kwargs['feature_names'] for x in mfcc_features):
+        set_track_mfccs(tracks, **kwargs)
 
 
-def set_features(tracks, args):
-    set_track_mfccs(
-        tracks,
-        n_fft=args.n_fft,
-        average=args.average,
-        normalize=args.normalize,
-        delta=args.delta,
-        delta_delta=args.delta_delta,
-        save=args.save_features,
-    )
-
-
-def load_tracks(label, args):
-    if args.load_features:
+def load_tracks(label, **kwargs):
+    if kwargs.get('load_features'):
         logging.info('Loading features into memory...')
-        tracks = joblib.load(args.load_features)
+        [tracks, kwargs] = joblib.load(kwargs['load_features'])
     else:
         with track_parser.get_instance(label) as parser:
-            tracks = parser.get_tracks(
-                min_sources=args.min_sources,
-                instruments=args.instruments,
-                rm_silence=args.rm_silence,
-                trim=args.trim,
-                count=args.count,
-            )
+            tracks = parser.get_tracks(**kwargs)
             tracks = list(tracks)
 
-            set_track_mfccs(
-                tracks,
-                n_fft=args.n_fft,
-                average=args.average,
-                normalize=args.normalize,
-                delta=args.delta,
-                delta_delta=args.delta_delta,
-                save=args.save_features,
-            )
-    return tracks
+            set_features(tracks, **kwargs)
+    return [tracks, kwargs]
 
 
-def main(args):
-    if args.load_features:
+def main(**kwargs):
+    start = time()
+    if kwargs['load_features']:
         logging.info('Loading features into memory...')
-        tracks = joblib.load(args.load_features)
+        tracks, args = joblib.load(kwargs['load_features'])
     else:
-        tracks = load_tracks(args)
+        tracks, _ = load_tracks(**kwargs)
 
-    if args.save_features:
+    if kwargs['save_features']:
         logging.info('Saving features to disk...')
-        joblib.dump(tracks, args.save_features, compress=True)
+        joblib.dump([tracks, kwargs], kwargs['save_features'], compress=True)
 
     logging.info(tracks)
+    end = time()
+    logging.info('Elapsed time: {}'.format(end - start))
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(
         description="Extract features from medleydb")
+    parser.add_argument('label', type=str, choices={'instrument', 'genre'},
+                        help='Track label')
     parser.add_argument('-s', '--save_features', type=str, default=None,
                         help='Location to save pickled features to')
     parser.add_argument('-l', '--load_features', type=str, default=None,
@@ -134,6 +123,10 @@ if __name__ == '__main__':
                         help='Remove silence from audio files')
     parser.add_argument('-t', '--trim', type=int, default=None,
                         help='Trim audio files to this length (in seconds)')
+    parser.add_argument('-f', '--feature_names', nargs='+', default=None,
+                        choices=['mfcc', 'mfcc_delta', 'mfcc_delta_delta'],
+                        required=True,
+                        help='List of features names to use')
     args = parser.parse_args()
 
-    main(args)
+    main(**vars(args))

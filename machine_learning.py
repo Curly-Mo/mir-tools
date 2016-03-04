@@ -13,6 +13,7 @@ import tempfile
 
 import numpy as np
 import sklearn
+import sklearn.ensemble
 import matplotlib as plt
 from sklearn.externals import joblib
 from sklearn.metrics import confusion_matrix
@@ -21,11 +22,24 @@ import feature_extraction
 import util
 
 
+class Classifier:
+    def __init__(self, clf=None, **kwargs):
+        if clf:
+            self.clf = clf
+        else:
+            self.clf = classifier(kwargs['classifier'])
+        self.args = kwargs
+        self.args.pop('save_classifier', None)
+        self.args.pop('load_classifier', None)
+        self.args.pop('save_features', None)
+        self.args.pop('load_features', None)
 
-def default_classifier():
+
+def instrument_classifier():
     dot = os.path.dirname(os.path.realpath(__file__))
-    DEFAULT = os.path.join(dot, 'data/default_svm.p')
+    DEFAULT = os.path.join(dot, 'data/instrument/svm.p')
     return load_classifier(DEFAULT)
+
 
 def confusion_str(cm, labels, hide_zeroes=False, hide_diagonal=False, hide_threshold=None):
     """pretty print for confusion matrices"""
@@ -105,44 +119,36 @@ def shape_features(tracks, feature_names):
     return X, Y
 
 
-def train_tracks(tracks, feature_names):
+def train_tracks(clf, tracks, feature_names):
     X, Y = shape_features(tracks, feature_names)
-    clf = train(X, Y)
+    clf = train(clf, X, Y)
     return clf
 
 
-def train(X, Y):
+def train(clf, X, Y):
     #X = sklearn.preprocessing.normalize(X, norm='l1', axis=1, copy=True)
-    logging.info('Training...')
-    clf = classifier()
-    clf.fit(X, Y)
+    logging.info('Training... {}'.format(str(clf.clf)))
+    clf.clf.fit(X, Y)
     return clf
 
 
 def predict_file(path, remove_silence=True):
     with tempfile.NamedTemporaryFile(suffix=os.path.splitext(path)[1]) as f:
         path = util.remove_silence(path, f.name, block=True)
-        clf, feature_names = default_classifier()
+        clf = instrument_classifier()
         track = {
             'file_path': path,
             'label': 'unknown',
         }
-        args = type('', (), {})
-        args.n_fft = 4096
-        args.average = 1
-        args.normalize = True
-        args.delta = True
-        args.delta_delta = False
-        args.save_features = False
-        feature_extraction.set_features([track, ], args)
+        feature_extraction.set_features([track, ], **clf.args)
 
-        prediction, predictions = predict_track(clf, track, feature_names)
+        prediction, predictions = predict_track(clf, track)
     logging.info(predictions)
     return prediction, predictions
 
 
-def predict_track(clf, track, feature_names):
-    predicted = predict_tracks(clf, [track, ], feature_names)
+def predict_track(clf, track):
+    predicted = predict_tracks(clf, [track, ])
     track['sample_predictions'] = predicted
     prediction, predictions = util.most_common(predicted)
     track['prediction'] = prediction
@@ -150,8 +156,8 @@ def predict_track(clf, track, feature_names):
     return prediction, predictions
 
 
-def predict_tracks(clf, tracks, feature_names):
-    X, Y = shape_features(tracks, feature_names)
+def predict_tracks(clf, tracks):
+    X, Y = shape_features(tracks, clf.args['feature_names'])
     return predict(X, clf)
 
 
@@ -162,8 +168,8 @@ def predict_features(features, clf):
 
 def predict(X, clf):
     #X = sklearn.preprocessing.normalize(X, norm='l1', axis=1, copy=True)
-    logging.info('Predicting...')
-    predicted = clf.predict(X)
+    logging.info('Predicting... {}'.format(str(clf.clf)))
+    predicted = clf.clf.predict(X)
     return predicted
 
 
@@ -185,69 +191,71 @@ def get_labels(tracks, features):
     return labels
 
 
-def classifier():
-    clf = sklearn.svm.LinearSVC(class_weight='auto')
+def classifier(classifier='linearsvm'):
+    clf = {
+        'linearsvm': sklearn.svm.LinearSVC(class_weight='auto'),
+        'rbfsvm': sklearn.svm.SVC(kernel='rbf', class_weight='auto'),
+        'adaboost': sklearn.ensemble.AdaBoostClassifier(),
+    }.get(classifier)
+    if clf is None:
+        raise 'invalid classifier: {}'.format(classifier)
     return clf
 
 
-def save_classifier(path, clf, feature_names):
-    classifier = {
-        'clf': clf,
-        'feature_names': feature_names,
-    }
+def save_classifier(path, clf):
     logging.info('Saving model to disk...')
-    joblib.dump(classifier, path, compress=True)
+    joblib.dump(clf, path, compress=True)
 
 
 def load_classifier(path):
     logging.info('Loading model into memory...')
-    classifier = joblib.load(path)
-    return classifier['clf'], classifier['feature_names']
+    clf = joblib.load(path)
+    return clf
 
 
-def train_main(args):
-    if args.load_classifier:
-        clf, feature_names = load_classifier(args.load_classifier)
+def train_main(**kwargs):
+    if kwargs['load_classifier']:
+        clf = load_classifier(kwargs['load_classifier'])
     else:
-        tracks = feature_extraction.load_tracks(args.label, args)
-        feature_names = feature_extraction.get_feature_names(args)
-        clf = train_tracks(tracks, feature_names)
+        tracks, args = feature_extraction.load_tracks(**kwargs)
+        clf = Classifier(**args)
+        clf = train_tracks(clf, tracks, clf.args['feature_names'])
 
-    if args.save_classifier:
-        save_classifier(args.save_classifier, clf, feature_names)
+    if kwargs['save_classifier']:
+        save_classifier(kwargs['save_classifier'], clf)
 
 
-def predict_main(args):
-    if args.load_classifier:
-        clf, feature_names = load_classifier(args.load_classifier)
+def predict_main(**kwargs):
+    if kwargs['load_classifier']:
+        clf = load_classifier(kwargs['load_classifier'])
     else:
-        tracks = feature_extraction.load_tracks(args.label, args)
-        feature_names = feature_extraction.get_feature_names(args)
-        clf = train_tracks(tracks, feature_names)
+        tracks, args = feature_extraction.load_tracks(kwargs['label'], kwargs)
+        clf = Classifier(**args)
+        clf = train_tracks(clf, tracks)
 
-    if args.predict_files:
+    if kwargs['predict_files']:
         predict_tracks = []
-        for filepath in args.predict_files:
+        for filepath in kwargs['predict_files']:
             prediction, predictions = predict_file(filepath, clf)
             print predictions
     else:
-        predict_tracks = feature_extraction.load_tracks(args.label, args)
-        feature_extraction.set_features(predict_tracks, args)
+        predict_tracks, args = feature_extraction.load_tracks(**kwargs)
+        feature_extraction.set_features(predict_tracks, kwargs)
 
         for track in predict_tracks:
-            prediction, predictions = predict_track(clf, track, feature_names)
+            prediction, predictions = predict_track(clf, track)
             print predictions
 
-    if args.save_classifier:
-        save_classifier(args.save_classifier, clf, feature_names)
+    if kwargs['save_classifier']:
+        save_classifier(kwargs['save_classifier'], clf)
 
 
-def main(args):
+def main(**kwargs):
     start = time()
-    if args.action == 'train':
-        train_main(args)
-    elif args.action == 'predict':
-        predict_main(args)
+    if kwargs['action'] == 'train':
+        train_main(**kwargs)
+    elif kwargs['action'] == 'predict':
+        predict_main(**kwargs)
 
     end = time()
     logging.info('Elapsed time: {}'.format(end - start))
@@ -285,12 +293,11 @@ if __name__ == '__main__':
                         help='Number of seconds to average features over')
     parser.add_argument('--normalize', action='store_true',
                         help='Normalize MFCC feature vectors between 0 and 1')
-    parser.add_argument('-d', '--delta', action='store_true',
-                        help='Compute MFCC deltas')
-    parser.add_argument('--delta_delta', action='store_true',
-                        help='Compute MFCC delta-deltas')
     parser.add_argument('--predict_files', nargs='*', default=None,
                         help='List of audio file paths to predict')
+    parser.add_argument('-f', '--feature_names', nargs='+', default=None,
+                        choices=['mfcc', 'mfcc_delta', 'mfcc_delta_delta'],
+                        help='List of features names to use')
     args = parser.parse_args()
 
-    main(args)
+    main(**vars(args))

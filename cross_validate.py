@@ -44,21 +44,22 @@ def track_report(tracks, plot=False, save=False):
 
 
 def best_svm(tracks, feature_names, n_iter=200, save=False):
-    clf = sklearn.svm.LinearSVC(class_weight='auto')
+    clf = machine_learning.Classifier('rbfsvm')
     X, Y = machine_learning.shape_features(tracks, feature_names)
     param_dist = {
         'C': scipy.stats.expon(scale=1000),
-        'class_weight': ['auto', None],
-        'loss': ['squared_hinge'],
-        'penalty': ['l1', 'l2'],
-        'dual': [False],
+        'class_weight': ['auto'],
+        #'loss': ['squared_hinge'],
+        #'penalty': ['l2'],
+        #'dual': [False],
         'tol': scipy.stats.expon(scale=0.1),
     }
     logging.info('Optimizing parameters: {}'.format(param_dist))
     random_search = sklearn.grid_search.RandomizedSearchCV(
-        clf,
+        clf.clf,
         param_distributions=param_dist,
-        n_iter=n_iter
+        n_iter=n_iter,
+        verbose=10,
     )
     random_search.fit(X, Y)
     for score in random_search.grid_scores_:
@@ -84,13 +85,14 @@ def cross_val_score(tracks, feature_names, folds=5):
     return scores
 
 
-def kfold(tracks, feature_names, folds=5, shuffle=True):
+def kfold(tracks, feature_names, folds=5, shuffle=True, **kwargs):
     labels = [track['label'] for track in tracks]
     kf = cross_validation.StratifiedKFold(labels, n_folds=folds, shuffle=shuffle)
     for train, test in kf:
         train_tracks = [tracks[i] for i in train]
         test_tracks = [tracks[i] for i in test]
-        clf = machine_learning.train_tracks(train_tracks, feature_names)
+        clf = machine_learning.Classifier(**kwargs)
+        clf = machine_learning.train_tracks(clf, train_tracks, feature_names)
         predicted_all = []
         Y_test_all = []
         for track in test_tracks:
@@ -103,24 +105,22 @@ def kfold(tracks, feature_names, folds=5, shuffle=True):
         yield test_tracks
 
 
-def main(args):
+def main(**kwargs):
     start = time()
-    tracks = feature_extraction.load_tracks(args.label, args)
+    tracks, args = feature_extraction.load_tracks(**kwargs)
 
-    feature_names = feature_extraction.get_feature_names(args)
-
-    if args.action == 'kfold':
-        folds = kfold(tracks, feature_names, args.folds)
+    if kwargs['action'] == 'kfold':
+        folds = kfold(tracks, **kwargs)
         for tracks in folds:
             scores = sample_report(tracks, plot=True)
             print(scores)
             scores = track_report(tracks, plot=True)
             print(scores)
-    elif args.action == 'cross_val_score':
-        scores = cross_val_score(tracks, feature_names, folds=args.folds)
+    elif kwargs['action'] == 'cross_val_score':
+        scores = cross_val_score(tracks, args['feature_names'], folds=args.folds)
         print(scores)
-    elif args.action == 'optimize':
-        clf = best_svm(tracks, feature_names, args.save_classifier)
+    elif kwargs['action'] == 'optimize':
+        clf = best_svm(tracks, args['feature_names'], save=kwargs['save_classifier'])
         print(clf)
 
     end = time()
@@ -144,8 +144,8 @@ if __name__ == '__main__':
                         help='Min sources required for instrument selection')
     parser.add_argument('-i', '--instruments', nargs='*', default=None,
                         help='List of instruments to extract')
-    parser.add_argument('-g', '--genress', nargs='*', default=None,
-                        help='List of genress to extract')
+    parser.add_argument('-g', '--genres', nargs='*', default=None,
+                        help='List of genres to extract')
     parser.add_argument('-c', '--count', type=int, default=None,
                         help='Max number of tracks for each label')
     parser.add_argument('-r', '--rm_silence', action='store_true',
@@ -156,16 +156,20 @@ if __name__ == '__main__':
                         help='Number of folds in kfold cross validation')
     parser.add_argument('-n', '--n_fft', type=int, default=2048,
                         help='FFT size of MFCCs')
+    parser.add_argument('--hop_length', type=int, default=1024,
+                        help='Hop size of MFCCs')
     parser.add_argument('-a', '--average', type=int, default=None,
                         help='Number of seconds to average features over')
     parser.add_argument('--normalize', action='store_true',
                         help='Normalize MFCC feature vectors between 0 and 1')
-    parser.add_argument('-d', '--delta', action='store_true',
-                        help='Compute MFCC deltas')
-    parser.add_argument('--delta_delta', action='store_true',
-                        help='Compute MFCC delta-deltas')
+    parser.add_argument('-f', '--feature_names', nargs='+', default=None,
+                        choices=['mfcc', 'mfcc_delta', 'mfcc_delta_delta'],
+                        help='List of features names to use')
     parser.add_argument('--save_classifier', type=str, default=None,
                         help='Location to save pickled classifier to')
+    parser.add_argument('--classifier', type=str, default='svm',
+                        choices=['linearsvm', 'rbfsvm', 'adaboost'],
+                        help='Type of classifier to use.')
     args = parser.parse_args()
 
-    main(args)
+    main(**vars(args))
