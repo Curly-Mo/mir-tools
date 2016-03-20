@@ -1,4 +1,7 @@
-from itertools import izip
+try:
+    from itertools import izip as zip
+except ImportError: # will be 3.x series
+    pass
 from collections import Counter
 import subprocess
 import logging
@@ -10,7 +13,7 @@ def grouper(iterable, n, padvalue=None):
     Removes last group if shorter than n
     grouper('abcdefg', 3) --> (('a','b','c'), ('d','e','f'))
     """
-    return izip(*[iter(iterable)]*n)
+    return zip(*[iter(iterable)]*n)
 
 
 def most_common(values):

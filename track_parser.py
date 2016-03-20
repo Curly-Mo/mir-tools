@@ -2,7 +2,7 @@
 """Tool to extract instrument stems from medleydb"""
 
 import logging
-logging.basicConfig(format='%(levelname)s: %(message)s', level=logging.INFO)
+#logging.basicConfig(format='%(levelname)s: %(message)s', level=logging.INFO)
 import os
 from collections import defaultdict
 import subprocess
@@ -10,7 +10,10 @@ import tempfile
 import shutil
 import argparse
 
+from past.translation import install_hooks, remove_hooks
+install_hooks(['medleydb'])
 import medleydb as mdb
+remove_hooks()
 
 
 def get_instance(name):

@@ -63,7 +63,7 @@ def set_track_mfccs(tracks, dc=False, n_fft=2048, average=None, normalize=False,
         args.pop('mfcc', None)
         args.pop('mfcc_delta', None)
         args.pop('mfcc_delta_delta', None)
-        print args
+        print(args)
         joblib.dump([tracks, args], save_features, compress=True)
     return tracks
 

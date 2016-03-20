@@ -6,7 +6,10 @@ import logging
 logging.basicConfig(format='%(levelname)s: %(message)s', level=logging.INFO)
 import os
 import argparse
-from itertools import izip
+try:
+    from itertools import izip as zip
+except ImportError: # will be 3.x series
+    pass
 from collections import Counter
 from time import time
 import tempfile
@@ -38,6 +41,7 @@ class Classifier:
 def instrument_classifier():
     dot = os.path.dirname(os.path.realpath(__file__))
     DEFAULT = os.path.join(dot, 'data/instrument/svm.p')
+    print(DEFAULT)
     return load_classifier(DEFAULT)
 
 
@@ -175,7 +179,7 @@ def predict(X, clf):
 
 def prediction_per_track(tracks, features, predicted):
     i = 0
-    for track, feature in izip(tracks, features):
+    for track, feature in zip(tracks, features):
         track_predictions = predicted[i:i+feature.shape[1]]
         most_common = Counter(track_predictions).most_common(1)[0][0]
         track.prediction = most_common
@@ -185,7 +189,7 @@ def prediction_per_track(tracks, features, predicted):
 
 def get_labels(tracks, features):
     labels = []
-    for track, feature in izip(tracks, features):
+    for track, feature in zip(tracks, features):
         # Repeat instrument name for each mfcc sample
         labels.append([track.label] * feature.shape[1])
     return labels
@@ -237,14 +241,14 @@ def predict_main(**kwargs):
         predict_tracks = []
         for filepath in kwargs['predict_files']:
             prediction, predictions = predict_file(filepath, clf)
-            print predictions
+            print(predictions)
     else:
         predict_tracks, args = feature_extraction.load_tracks(**kwargs)
         feature_extraction.set_features(predict_tracks, kwargs)
 
         for track in predict_tracks:
             prediction, predictions = predict_track(clf, track)
-            print predictions
+            print(predictions)
 
     if kwargs['save_classifier']:
         save_classifier(kwargs['save_classifier'], clf)
