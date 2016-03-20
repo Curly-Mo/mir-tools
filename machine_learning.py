@@ -41,7 +41,6 @@ class Classifier:
 def instrument_classifier():
     dot = os.path.dirname(os.path.realpath(__file__))
     DEFAULT = os.path.join(dot, 'data/instrument/svm.p')
-    print(DEFAULT)
     return load_classifier(DEFAULT)
 
 
