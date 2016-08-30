@@ -21,8 +21,8 @@ import matplotlib as plt
 from sklearn.externals import joblib
 from sklearn.metrics import confusion_matrix
 
-import feature_extraction
-import util
+from . import feature_extraction
+from . import util
 
 
 class Classifier:

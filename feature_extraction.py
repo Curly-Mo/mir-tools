@@ -11,8 +11,8 @@ import librosa
 from sklearn.externals import joblib
 import numpy as np
 
-import track_parser
-import util
+from . import track_parser
+from . import util
 
 
 def get_mfccs(track, dc=False, n_fft=2048, average=None, normalize=False,
