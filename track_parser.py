@@ -10,11 +10,6 @@ import tempfile
 import shutil
 import argparse
 
-from past.translation import install_hooks, remove_hooks
-install_hooks(['medleydb'])
-import medleydb as mdb
-remove_hooks()
-
 
 def get_instance(name):
     for cls in TrackParser.__subclasses__():
@@ -50,6 +45,7 @@ class InstrumentParser(TrackParser):
 
     def get_valid_instruments(self, min_sources):
         """Get set of instruments with at least min_sources different sources"""
+        import medleydb as mdb
         logging.info('Determining valid instruments...\n')
         multitrack_list = mdb.load_all_multitracks()
 
@@ -65,6 +61,7 @@ class InstrumentParser(TrackParser):
         return {i for i in instrument_counts if instrument_counts[i] >= min_sources}
 
     def get_tracks(self, min_sources=10, instruments=None, rm_silence=False, trim=None, count=None, **kwargs):
+        import medleydb as mdb
         if instruments:
             valid_instruments = instruments
         else:
@@ -105,6 +102,7 @@ class GenreParser(TrackParser):
 
     def get_valid_genres(self, min_sources):
         """Get set of genres with at least min_sources different sources"""
+        import medleydb as mdb
         logging.info('Determining valid genres...\n')
         multitrack_list = mdb.load_all_multitracks()
 
@@ -116,6 +114,7 @@ class GenreParser(TrackParser):
         return {g for g in genre_counts if genre_counts[g] >= min_sources}
 
     def get_tracks(self, min_sources=10, genres=None, count=None, **kwargs):
+        import medleydb as mdb
         if genres:
             valid_genres = genres
         else:
