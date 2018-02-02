@@ -17,7 +17,7 @@ import tempfile
 import numpy as np
 import sklearn
 import sklearn.ensemble
-import matplotlib as plt
+import matplotlib.pyplot as plt
 from sklearn.externals import joblib
 from sklearn.metrics import confusion_matrix
 
